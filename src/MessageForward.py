@@ -7,7 +7,7 @@ from conf.config import allConf
 
 class MessageForward(object):
 	def __init__(self):
-		self.publishService = PublishService(self, None)
+		self.publishService = PublishService(self)
 		self.broadcastService = BroadcastService()
 
 		commonConf = allConf.common
