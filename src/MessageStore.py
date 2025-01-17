@@ -13,6 +13,9 @@ class MessageStore(object):
 	def NewPublisher(self):
 		self.publisherId += 1
 
+	def PublisherId(self):
+		return self.publisherId
+
 	def AppendMsg(self, msg):
 		raise NotImplementedError
 

@@ -1,6 +1,7 @@
 import os
 import shutil
 import unittest
+import logging
 
 from src import FileStore, MessageStore, MessageStoreFactory
 
@@ -13,6 +14,9 @@ class TestMessageStore(unittest.TestCase):
 		self.fileStorePath = None
 		# fileStore = FileStore.FileMessageStore()
 		# os.removedirs(fileStore.fileStorePath)
+		
+		# swallow log.
+		logging.disable(logging.ERROR)
 
 	def tearDown(self):
 		# del file store.
