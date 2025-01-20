@@ -15,6 +15,9 @@ class TestMessageForward(unittest.TestCase):
 		self.service.publishService.Start()
 		self.service.broadcastService.Start()
 
+		# reset message store.
+		MessageStoreFactory.MessageStoreFactory.MessageStoreInstance().__init__()
+
 		# worker thread.
 		self.worker = Worker.Worker()
 		self.worker.start()
@@ -158,9 +161,129 @@ class TestMessageForward(unittest.TestCase):
 		# wait until receiverTask socket was closed by server.
 		connectionNum = 1
 		self.waitUntil(broadConnectCondition)
-		return
 
 		# check receiver sock was closed.
 		receiverTask2.sock.setblocking(True)
 		recvMsg = receiverTask2.sock.recv(1024)
 		self.assertEqual(recvMsg, '')
+
+	# check msg receive.
+	def test_MsgReceive(self):
+		receivers = ReceiverManager.AllReceivers.Instance()
+
+		paddress = (allConf.api.publishHost, int(allConf.api.publishPort))
+		senderTask1 = Worker.PublisherMsgSenderTask(paddress)
+
+		baddress = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
+		receiverTask1 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverTask1.verify()
+
+		publisherId = 0
+		receiverNum = 1
+		def PRcondition():
+			publisher = self.service.publishService.CurrentPublisher()
+			return publisher and publisher.publisherId == publisherId and \
+				len(receivers) == receiverNum
+
+		self.waitUntil(PRcondition)
+
+		## check send and recv.
+		msg = ','.join([str(num) for num in range(10)])
+		senderTask1.sendMsg(msg)
+		receiverTask1.setReadLen(len(msg))
+
+		self.worker.AppendTask(senderTask1)
+		self.worker.AppendTask(receiverTask1)
+
+		def readConfition():
+			return senderTask1.Done() and receiverTask1.Done()
+		self.waitUntil(readConfition)
+
+		self.assertEqual(msg, receiverTask1.receiverBuffer)
+		self.assertIn(50001, receivers)
+		receiver = receivers[50001]
+		self.assertEqual(receiver.publisherId, 0)
+		self.assertEqual(receiver.msgIdx, len(msg))
+
+		## receiver connects later than sender.
+		receiverTask2 = Worker.BroadcastMsgReceiverTask(baddress, 50002)
+		receiverTask2.verify()
+		receiverTask2.setReadLen(len(msg))
+
+		self.worker.AppendTask(receiverTask2)
+		self.waitUntil(receiverTask2.Done)
+		
+		self.assertEqual(msg, receiverTask2.receiverBuffer)
+		self.assertIn(50002, receivers)
+		receiver2 = receivers[50002]
+		self.assertEqual(receiver2.publisherId, 0)
+		self.assertEqual(receiver2.msgIdx, len(msg))
+
+		## broadCast to multi receiver.
+		senderTask1.sendMsg(msg)
+		receiverTask1.setReadLen(len(msg))
+		receiverTask2.setReadLen(len(msg))
+
+		self.worker.AppendTask(senderTask1)
+		self.worker.AppendTask(receiverTask1)
+		self.worker.AppendTask(receiverTask2)
+
+		def readCondition2():
+			return senderTask1.Done() and receiverTask1.Done() and receiverTask2.Done()
+		self.waitUntil(readCondition2)
+
+		self.assertEqual(msg, receiverTask1.receiverBuffer)
+		self.assertEqual(msg, receiverTask2.receiverBuffer)
+
+		## publisher reconnect.
+		senderTask2 = Worker.PublisherMsgSenderTask(paddress)
+		publisherId = 1
+		def newPublisherCondition():
+			publisher = self.service.publishService.CurrentPublisher()
+			return publisher and publisher.publisherId == publisherId
+		self.waitUntil(newPublisherCondition)
+
+		senderTask3 = Worker.PublisherMsgSenderTask(paddress)
+		senderTask3.sendMsg(msg)
+
+		self.worker.AppendTask(senderTask3)
+		def receiverCondition():
+			publisher = self.service.publishService.CurrentPublisher()
+			return publisher and publisher.receiveMsgLen == len(msg) and senderTask3.Done()
+		self.waitUntil(receiverCondition)
+
+		# receiverTask1 & receiverTask2 will be closed by server.
+		receiverTask1.sock.setblocking(True)
+		recvMsg = receiverTask1.sock.recv(1024)
+		self.assertEqual(recvMsg, '')
+		self.assertIsNone(receivers[50001].connection)
+		self.assertEqual(receivers[50001].publisherId, 1)
+
+		receiverTask2.sock.setblocking(True)
+		recvMsg = receiverTask2.sock.recv(1024)
+		self.assertEqual(recvMsg, '')
+		self.assertIsNone(receivers[50002].connection)
+		self.assertEqual(receivers[50002].publisherId, 1)
+
+		## reconnect as 50001.
+		receiverTask3 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverTask3.verify()
+		receiverTask3.setReadLen(100)
+
+		self.worker.AppendTask(receiverTask3)
+		def receiverCondition():
+			receiver = receivers[50001]
+			return receiver and receiver.publisherId == 2 and receiverTask3.Done()
+		self.waitUntil(receiverCondition)
+
+		# recv nothing.
+		self.assertEqual(receiverTask3.receiverBuffer, '')
+
+		## reconnect as 50001 again.
+		receiverTask4 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverTask4.verify()
+		receiverTask4.setReadLen(len(msg))
+
+		self.worker.AppendTask(receiverTask4)
+		self.waitUntil(receiverTask4.Done)
+		self.assertEqual(receiverTask4.receiverBuffer, msg)

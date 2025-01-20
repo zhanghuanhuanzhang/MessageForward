@@ -7,6 +7,7 @@ class MessageStoreFactory(object):
 
 	@classmethod
 	def MessageStoreInstance(cls):
+		import FileStore, MessageStore
 		if cls.messageStoreName not in cls.allMessageStore:
 			raise Exception('not find {0} message store'.format(cls.messageStoreName))
 

@@ -42,11 +42,11 @@ class Receiver(object):
 		self.connection = connection
 
 	def SendMsg(self):
-		if not self.connection:
-			return
-
 		# todo flow control && write buffer check.
 		currentPublisherId = self.messageStore.PublisherId()
+		if not self.connection or currentPublisherId < 0:
+			return
+
 		if currentPublisherId == self.publisherId:
 			self.SendCurrentPublisherMsg()
 		elif currentPublisherId > self.publisherId:

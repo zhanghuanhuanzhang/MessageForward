@@ -110,6 +110,8 @@ class BroadcastMsgReceiverTask(Task):
 		try:
 			# blocking wait to recv expected len
 			while True:
+				if self.readLen - len(self.receiverBuffer) <= 0:
+					break
 				recvMsg = self.sock.recv(self.readLen - len(self.receiverBuffer))
 				if not recvMsg:
 					break
