@@ -2,12 +2,13 @@ import unittest
 import Worker
 import logging
 
-from src import MessageForward, MessageStoreFactory
+from src import MessageForward, MessageStoreFactory, ReceiverManager, BroadcastService
 from conf.config import allConf
 
 class TestMessageForward(unittest.TestCase):
 	def setUp(self):
 		# self.fileStorePath = None
+		BroadcastService.BroadcastService.VERIFY_TIME = 2
 		logging.disable(logging.ERROR)
 
 		self.service = MessageForward.MessageForward()
@@ -21,12 +22,16 @@ class TestMessageForward(unittest.TestCase):
 	def tearDown(self):
 		self.worker.AppendTask(Worker.StopWorkerTask(self.worker))
 		self.worker.join()
+		self.service.publishService.Close()
+		self.service.broadcastService.Close()
 
 	def waitUntil(self, condition):
 		loopTime = 10
 		while loopTime > 0:
 			loopTime -= 1
 			self.service.loop(1)
+			ReceiverManager.AllReceivers.Instance().BroadcastMsg()
+			self.service.broadcastService.CloseTimeoutConnections()
 			if condition():
 				break
 		else:
@@ -93,7 +98,7 @@ class TestMessageForward(unittest.TestCase):
 		self.worker.AppendTask(senderTask3)
 		def receiveCondition():
 			publisher = self.service.publishService.CurrentPublisher()
-			return publisher.receiveMsgLen == len(msg) and senderTask3.Done()
+			return publisher and publisher.receiveMsgLen == len(msg) and senderTask3.Done()
 		self.waitUntil(receiveCondition)
 
 		publisherConnect = self.service.publishService.CurrentPublisher()
@@ -101,3 +106,61 @@ class TestMessageForward(unittest.TestCase):
 		self.assertEqual(messageStore.GetMsg(0, 0), msg)
 		self.assertIsNone(messageStore.GetMsg(1, 0))
 		self.assertEqual(messageStore.GetMsg(2, 0), msg)
+
+	# check broadcast service state.
+	def test_BroadbastServiceState(self):
+		receivers = ReceiverManager.AllReceivers.Instance()
+		self.assertEqual(len(receivers), 0)
+		BCS = self.service.broadcastService
+		self.assertEqual(len(BCS.allConnection), 0)
+
+		# connect to broadcast service.
+		recieverId = 50001
+		address = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
+		receiverTask = Worker.BroadcastMsgReceiverTask(address, recieverId)
+
+		connectionNum = 1
+		def broadConnectCondition():
+			return BCS.ReceiverNum() == connectionNum
+		self.waitUntil(broadConnectCondition)
+
+		# check broadcastConnection State.
+		self.assertEqual(BCS.ReceiverNum(), 1)
+		broadcastConnection = BCS.allConnection.values()[0]
+		self.assertEqual(broadcastConnection.state, BroadcastService.BroadcastConnect.NONE_STATE)
+		self.assertIsNone(broadcastConnection.receiverId)
+		self.assertEqual(len(receivers), 0)
+
+		# verify connection.
+		receiverTask.verify()
+		receiverNum = 1
+		def receiverCondition():
+			return len(receivers) == receiverNum
+		self.waitUntil(receiverCondition)
+
+		# check broadcastConnection after verified.
+		self.assertEqual(broadcastConnection.state, BroadcastService.BroadcastConnect.VERIFIED_STATE)
+		self.assertEqual(broadcastConnection.receiverId, recieverId)
+		
+		self.assertIn(recieverId, receivers)
+		receiver = receivers[recieverId]
+		self.assertEqual(receiver.publisherId, 0)
+		self.assertEqual(receiver.msgIdx, 0)
+
+		## test verify timeout.
+		recieverId = 50002
+		address = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
+		receiverTask2 = Worker.BroadcastMsgReceiverTask(address, recieverId)
+
+		connectionNum = 2
+		self.waitUntil(broadConnectCondition)
+
+		# wait until receiverTask socket was closed by server.
+		connectionNum = 1
+		self.waitUntil(broadConnectCondition)
+		return
+
+		# check receiver sock was closed.
+		receiverTask2.sock.setblocking(True)
+		recvMsg = receiverTask2.sock.recv(1024)
+		self.assertEqual(recvMsg, '')

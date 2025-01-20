@@ -3,6 +3,7 @@ import logging
 import threading
 import socket
 import time
+import struct
 
 class Worker(threading.Thread):
 	
@@ -78,4 +79,41 @@ class PublisherMsgSenderTask(Task):
 	def __call__(self):
 		self.sock.send(self.msg)
 		self.msg = None
+		self.SetState(1)
+
+class BroadcastMsgReceiverTask(Task):
+
+	def __init__(self, address, receiverId):
+		super(BroadcastMsgReceiverTask, self).__init__()
+		self.address = address
+		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		# self.sock.setblocking(False)
+		self.sock.connect(address)
+
+		self.receiverBuffer = ''
+		self.receiverId = struct.pack('!I', receiverId)
+		# self.sock.send(self.receiverId)
+		self.readLen = 0
+
+	def verify(self):
+		# segment sending receiverId.
+		self.sock.send(self.receiverId[:1])
+		self.sock.send(self.receiverId[1:3])
+		self.sock.send(self.receiverId[3:])
+
+	def setReadLen(self, len):
+		self.readLen = len
+		self.receiverBuffer = ''
+		self.SetState(0)
+
+	def __call__(self):
+		try:
+			# blocking wait to recv expected len
+			while True:
+				recvMsg = self.sock.recv(self.readLen - len(self.receiverBuffer))
+				if not recvMsg:
+					break
+				self.receiverBuffer += recvMsg
+		except Exception as e:
+			pass
 		self.SetState(1)
