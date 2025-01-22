@@ -52,17 +52,10 @@ class BroadcastConnect(TcpConnect):
 		if self.state != self.NONE_STATE:
 			return
 
-		# 四字节整数,按大端序解析.
 		self.readBuffer += msg
-		if self.readBuffer >= 4:
-			try:
-				# unpack return a tuple.
-				self.receiverId = struct.unpack('!I', self.readBuffer)[0]
-			except Exception as e:
-				logging.warring("received error receiverId")
-				self.server.CloseConnection(self.addr)
-				return
-
+		endIdx = self.readBuffer.find('\0')
+		if endIdx > 0:
+			self.receiverId = self.readBuffer[:endIdx]
 			AllReceivers.Instance().AppendReceiver(self.receiverId, self)
 			self.state = self.VERIFIED_STATE
 
