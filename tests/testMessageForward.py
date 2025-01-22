@@ -1,6 +1,7 @@
 import unittest
 import Worker
 import logging
+import time
 
 from src import MessageForward, MessageStoreFactory, ReceiverManager, BroadcastService
 from conf.config import allConf
@@ -29,10 +30,9 @@ class TestMessageForward(unittest.TestCase):
 		self.service.broadcastService.Close()
 
 	def waitUntil(self, condition):
-		loopTime = 10
-		while loopTime > 0:
-			loopTime -= 1
-			self.service.loop(1)
+		begTs = time.time()
+		while time.time() - begTs < 10:
+			self.service.loop(float(allConf.common.loopTime))
 			ReceiverManager.AllReceivers.Instance().BroadcastMsg()
 			self.service.broadcastService.CloseTimeoutConnections()
 			if condition():
