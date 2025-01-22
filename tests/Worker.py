@@ -91,7 +91,8 @@ class BroadcastMsgReceiverTask(Task):
 		self.sock.connect(address)
 
 		self.receiverBuffer = ''
-		self.receiverId = struct.pack('!I', receiverId)
+		# self.receiverId = struct.pack('!I', receiverId)
+		self.receiverId = receiverId
 		# self.sock.send(self.receiverId)
 		self.readLen = 0
 

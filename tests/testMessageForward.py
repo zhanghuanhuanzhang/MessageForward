@@ -118,7 +118,7 @@ class TestMessageForward(unittest.TestCase):
 		self.assertEqual(len(BCS.allConnection), 0)
 
 		# connect to broadcast service.
-		recieverId = 50001
+		recieverId = 'client50001\0suffix'
 		address = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
 		receiverTask = Worker.BroadcastMsgReceiverTask(address, recieverId)
 
@@ -142,6 +142,7 @@ class TestMessageForward(unittest.TestCase):
 		self.waitUntil(receiverCondition)
 
 		# check broadcastConnection after verified.
+		recieverId='client50001'
 		self.assertEqual(broadcastConnection.state, BroadcastService.BroadcastConnect.VERIFIED_STATE)
 		self.assertEqual(broadcastConnection.receiverId, recieverId)
 		
@@ -151,7 +152,7 @@ class TestMessageForward(unittest.TestCase):
 		self.assertEqual(receiver.msgIdx, 0)
 
 		## test verify timeout.
-		recieverId = 50002
+		recieverId = 'client50002\0'
 		address = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
 		receiverTask2 = Worker.BroadcastMsgReceiverTask(address, recieverId)
 
@@ -174,8 +175,9 @@ class TestMessageForward(unittest.TestCase):
 		paddress = (allConf.api.publishHost, int(allConf.api.publishPort))
 		senderTask1 = Worker.PublisherMsgSenderTask(paddress)
 
+		receiverId = 'client50001\0'
 		baddress = (allConf.api.broadcastHost, int(allConf.api.broadcastPort))
-		receiverTask1 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverTask1 = Worker.BroadcastMsgReceiverTask(baddress, receiverId)
 		receiverTask1.verify()
 
 		publisherId = 0
@@ -200,13 +202,15 @@ class TestMessageForward(unittest.TestCase):
 		self.waitUntil(readConfition)
 
 		self.assertEqual(msg, receiverTask1.receiverBuffer)
-		self.assertIn(50001, receivers)
-		receiver = receivers[50001]
+		receiverId = 'client50001'
+		self.assertIn(receiverId, receivers)
+		receiver = receivers[receiverId]
 		self.assertEqual(receiver.publisherId, 0)
 		self.assertEqual(receiver.msgIdx, len(msg))
 
 		## receiver connects later than sender.
-		receiverTask2 = Worker.BroadcastMsgReceiverTask(baddress, 50002)
+		receiverId2 = 'client50002\0'
+		receiverTask2 = Worker.BroadcastMsgReceiverTask(baddress, receiverId2)
 		receiverTask2.verify()
 		receiverTask2.setReadLen(len(msg))
 
@@ -214,8 +218,9 @@ class TestMessageForward(unittest.TestCase):
 		self.waitUntil(receiverTask2.Done)
 		
 		self.assertEqual(msg, receiverTask2.receiverBuffer)
-		self.assertIn(50002, receivers)
-		receiver2 = receivers[50002]
+		receiverId2 = 'client50002'
+		self.assertIn(receiverId2, receivers)
+		receiver2 = receivers[receiverId2]
 		self.assertEqual(receiver2.publisherId, 0)
 		self.assertEqual(receiver2.msgIdx, len(msg))
 
@@ -256,23 +261,24 @@ class TestMessageForward(unittest.TestCase):
 		receiverTask1.sock.setblocking(True)
 		recvMsg = receiverTask1.sock.recv(1024)
 		self.assertEqual(recvMsg, '')
-		self.assertIsNone(receivers[50001].connection)
-		self.assertEqual(receivers[50001].publisherId, 1)
+		self.assertIsNone(receivers[receiverId].connection)
+		self.assertEqual(receivers[receiverId].publisherId, 1)
 
 		receiverTask2.sock.setblocking(True)
 		recvMsg = receiverTask2.sock.recv(1024)
 		self.assertEqual(recvMsg, '')
-		self.assertIsNone(receivers[50002].connection)
-		self.assertEqual(receivers[50002].publisherId, 1)
+		self.assertIsNone(receivers[receiverId2].connection)
+		self.assertEqual(receivers[receiverId2].publisherId, 1)
 
 		## reconnect as 50001.
-		receiverTask3 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverId = 'client50001\0'
+		receiverTask3 = Worker.BroadcastMsgReceiverTask(baddress, receiverId)
 		receiverTask3.verify()
 		receiverTask3.setReadLen(100)
 
 		self.worker.AppendTask(receiverTask3)
 		def receiverCondition():
-			receiver = receivers[50001]
+			receiver = receivers['client50001']
 			return receiver and receiver.publisherId == 2 and receiverTask3.Done()
 		self.waitUntil(receiverCondition)
 
@@ -280,7 +286,7 @@ class TestMessageForward(unittest.TestCase):
 		self.assertEqual(receiverTask3.receiverBuffer, '')
 
 		## reconnect as 50001 again.
-		receiverTask4 = Worker.BroadcastMsgReceiverTask(baddress, 50001)
+		receiverTask4 = Worker.BroadcastMsgReceiverTask(baddress, receiverId)
 		receiverTask4.verify()
 		receiverTask4.setReadLen(len(msg))
 
