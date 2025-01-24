@@ -52,6 +52,7 @@ def Main():
         print("Sent: {}".format(dataToSend))
 
         # Receive data from the second connection
+        client2.SendData("client2\0")
         receivedData = client2.ReceiveData()
         print("Received: {}".format(receivedData))
 
