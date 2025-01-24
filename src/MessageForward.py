@@ -16,6 +16,8 @@ class MessageForward(object):
 		commonConf = allConf.common
 		self.loop = asyncore.poll2 if int(commonConf.usePoll) else asyncore.poll
 		self.loopTime = float(commonConf.loopTime)
+		if self.loopTime <= 0:
+			raise Exception('common.loopTime must be configured as a positive number!')
 
 	def Run(self):
 		self.publishService.Start()

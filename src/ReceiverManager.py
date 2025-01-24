@@ -1,7 +1,9 @@
+import time
 import logging
 
 from UserDict import UserDict
 from MessageStoreFactory import MessageStoreFactory
+from conf.config import allConf
 
 class AllReceivers(UserDict):
 	instance=None
@@ -24,11 +26,15 @@ class AllReceivers(UserDict):
 			receiver.SendMsg()
 
 class Receiver(object):
+	SEND_INTERVAL=float(allConf.common.sendInterval)
+	TRAFFIC_LIMIT=int(allConf.common.trafficLimit)
 
 	def __init__(self, receiverId):
 		self.receiverId = receiverId
 		self.connection = None
 		self.messageStore = MessageStoreFactory.MessageStoreInstance()
+		self.lastSendTs = time.time()
+		self.trafficRestrict = False
 		
 		# msgIdx
 		self.publisherId = 0
@@ -47,6 +53,11 @@ class Receiver(object):
 		if not self.connection or currentPublisherId < 0:
 			return
 
+		now = time.time()
+		if self.trafficRestrict and now - self.lastSendTs < self.SEND_INTERVAL:
+			return
+		self.lastSendTs = now
+
 		if currentPublisherId == self.publisherId:
 			self.SendCurrentPublisherMsg()
 		elif currentPublisherId > self.publisherId:
@@ -62,10 +73,17 @@ class Receiver(object):
 			logging.warning("ReceiverId: {0} greater than publisherId: {1}".format(self.publisherId, currentPublisherId))
 
 	def SendCurrentPublisherMsg(self):
-		while True:
+		remainLen = self.TRAFFIC_LIMIT - len(self.connection.out_buffer)
+		while remainLen > 0:
 			msg = self.messageStore.GetMsg(self.publisherId, self.msgIdx)
 			if not msg:
+				self.trafficRestrict = False
 				break
 
+			msg = msg[:remainLen]
 			self.connection.Send(msg)
-			self.msgIdx += len(msg)
+			msgLen = len(msg)
+			self.msgIdx += msgLen
+			remainLen -= msgLen
+		else:
+			self.trafficRestrict = True
