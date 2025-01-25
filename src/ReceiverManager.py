@@ -46,6 +46,7 @@ class Receiver(object):
 			self.connection.server.CloseConnection(self.connection.addr)
 
 		self.connection = connection
+		self.msgIdx = 0
 
 	def SendMsg(self):
 		# todo flow control && write buffer check.
@@ -67,7 +68,7 @@ class Receiver(object):
 				self.connection.server.CloseConnection(self.connection.addr)
 				# modify next publisher info.
 				self.publisherId += 1
-				self.msgIdx = 0
+				# self.msgIdx = 0
 				# self.connection = None
 		else:
 			logging.warning("ReceiverId: {0} greater than publisherId: {1}".format(self.publisherId, currentPublisherId))
