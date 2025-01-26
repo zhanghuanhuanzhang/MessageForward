@@ -37,7 +37,9 @@ class Receiver(object):
 		self.trafficRestrict = False
 		
 		# msgIdx
+		# PublisherId is the segment id of the whole message storage.
 		self.publisherId = 0
+		# MsgIdx is the index within the segment.
 		self.msgIdx = 0
 
 	def SetConnection(self, connection):
